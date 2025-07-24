@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Team, TeamMember } from '../../entities';
@@ -17,7 +21,7 @@ export class TeamsService {
   async create(createTeamDto: CreateTeamDto): Promise<Team> {
     // Verificar se CPF já existe
     const existingTeam = await this.teamRepository.findOne({
-      where: { captainCpf: createTeamDto.captainCpf }
+      where: { captainCpf: createTeamDto.captainCpf },
     });
 
     if (existingTeam) {
@@ -38,11 +42,11 @@ export class TeamsService {
 
     // Criar membros da equipe
     if (createTeamDto.members && createTeamDto.members.length > 0) {
-      const members = createTeamDto.members.map(memberDto => 
+      const members = createTeamDto.members.map((memberDto) =>
         this.teamMemberRepository.create({
           ...memberDto,
           teamId: savedTeam.id,
-        })
+        }),
       );
       await this.teamMemberRepository.save(members);
     }
@@ -51,16 +55,20 @@ export class TeamsService {
   }
 
   async findAll(): Promise<Team[]> {
-    return this.teamRepository.find({
-      relations: ['members'],
-      order: { createdAt: 'DESC' }
+    const teams = await this.teamRepository.find({
+      relations: ['members'], // Ensure members are loaded
     });
+    // Normalize members to always be an array
+    return teams.map((team) => ({
+      ...team,
+      members: Array.isArray(team.members) ? team.members : [],
+    }));
   }
 
   async findOne(id: number): Promise<Team> {
     const team = await this.teamRepository.findOne({
       where: { id },
-      relations: ['members']
+      relations: ['members'],
     });
 
     if (!team) {
@@ -74,9 +82,12 @@ export class TeamsService {
     const team = await this.findOne(id);
 
     // Verificar se CPF já existe em outra equipe
-    if (updateTeamDto.captainCpf && updateTeamDto.captainCpf !== team.captainCpf) {
+    if (
+      updateTeamDto.captainCpf &&
+      updateTeamDto.captainCpf !== team.captainCpf
+    ) {
       const existingTeam = await this.teamRepository.findOne({
-        where: { captainCpf: updateTeamDto.captainCpf }
+        where: { captainCpf: updateTeamDto.captainCpf },
       });
 
       if (existingTeam) {
@@ -95,11 +106,11 @@ export class TeamsService {
 
       // Criar novos membros
       if (updateTeamDto.members.length > 0) {
-        const members = updateTeamDto.members.map(memberDto => 
+        const members = updateTeamDto.members.map((memberDto) =>
           this.teamMemberRepository.create({
             ...memberDto,
             teamId: id,
-          })
+          }),
         );
         await this.teamMemberRepository.save(members);
       }
@@ -121,23 +132,26 @@ export class TeamsService {
       .leftJoinAndSelect('team.members', 'members')
       .getMany();
 
-    return teams.map(team => {
-      const totalPoints = team.fishCatches
-        .filter(catch_ => catch_.valid)
-        .reduce((sum, catch_) => sum + Number(catch_.calculatedPoints), 0);
+    return teams
+      .map((team) => {
+        const totalPoints = team.fishCatches
+          .filter((catch_) => catch_.valid)
+          .reduce((sum, catch_) => sum + Number(catch_.calculatedPoints), 0);
 
-      const totalFish = team.fishCatches.filter(catch_ => catch_.valid).length;
+        const totalFish = team.fishCatches.filter(
+          (catch_) => catch_.valid,
+        ).length;
 
-      return {
-        id: team.id,
-        name: team.name,
-        captainName: team.captainName,
-        totalPoints,
-        totalFish,
-        members: team.members,
-        catches: team.fishCatches.filter(catch_ => catch_.valid)
-      };
-    }).sort((a, b) => b.totalPoints - a.totalPoints);
+        return {
+          id: team.id,
+          name: team.name,
+          captainName: team.captainName,
+          totalPoints,
+          totalFish,
+          members: team.members,
+          catches: team.fishCatches.filter((catch_) => catch_.valid),
+        };
+      })
+      .sort((a, b) => b.totalPoints - a.totalPoints);
   }
 }
-
